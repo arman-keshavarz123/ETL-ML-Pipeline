@@ -1,0 +1,30 @@
+# demo_user_pipeline.yaml
+# Feeds intentionally broken user JSON through Pydantic validation.
+# Bad records (invalid emails, negative IDs, empty names) are dropped.
+
+version: "1.0"
+
+pipeline:
+  name: "broken_users_demo"
+  description: "Demo: validate broken user JSON, drop bad records, save good ones."
+
+  extract:
+    source: "json_file"
+    config_file: "configs/sources/local_users.yaml"
+
+  transform:
+    - name: "pydantic_validation"
+      config_file: "configs/transforms/user_validation.yaml"
+    - name: "data_cleaning"
+      config_file: "configs/transforms/user_cleaning.yaml"
+
+  load:
+    destination: "json_local"
+    config_file: "configs/loaders/user_json_local.yaml"
+
+settings:
+  log_level: "INFO"
+  retry:
+    max_attempts: 1
+    backoff_seconds: 0
+  on_failure: "abort"

@@ -1,0 +1,35 @@
+# webscrape_pipeline.yaml
+# ─────────────────────────────────────────────────────────────────────
+# Scrapes book titles and prices from books.toscrape.com,
+# cleans the data, and writes the result to a local JSON file.
+# Requires: playwright install chromium
+# ─────────────────────────────────────────────────────────────────────
+
+version: "1.0"
+
+pipeline:
+  name: "books_webscrape"
+  description: "Scrape book data from books.toscrape.com and save to JSON."
+
+  # ── Extract ────────────────────────────────────────────────────────
+  extract:
+    source: "playwright_scraper"
+    config_file: "configs/sources/webscrape_example.yaml"
+
+  # ── Transform (chain executed top-to-bottom) ───────────────────────
+  transform:
+    - name: "data_cleaning"
+      config_file: "configs/transforms/data_cleaning.yaml"
+
+  # ── Load ───────────────────────────────────────────────────────────
+  load:
+    destination: "json_local"
+    config_file: "configs/loaders/json_local.yaml"
+
+# ── Global settings ──────────────────────────────────────────────────
+settings:
+  log_level: "INFO"
+  retry:
+    max_attempts: 3
+    backoff_seconds: 2
+  on_failure: "abort"

@@ -1,0 +1,6 @@
+# configs/loaders/json_local.yaml
+# Settings for writing pipeline output to a local JSON file.
+
+output_path: "output/todos.json"
+orient: "records"
+indent: 2

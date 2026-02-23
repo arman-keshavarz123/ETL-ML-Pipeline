@@ -1,0 +1,12 @@
+# configs/sources/webscrape_example.yaml
+# Scrape book titles and prices from books.toscrape.com (free sandbox).
+
+url: "https://books.toscrape.com/"
+wait_for: "article.product_pod"
+timeout: 30000
+headless: true
+selectors:
+  - name: "title"
+    css: "article.product_pod h3 a"
+  - name: "price"
+    css: "article.product_pod .price_color"

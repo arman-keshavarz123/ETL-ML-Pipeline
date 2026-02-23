@@ -1,0 +1,6 @@
+strip_whitespace: true
+deduplicate: true
+cast_types:
+  userId: "int64"
+  id: "int64"
+  completed: "bool"

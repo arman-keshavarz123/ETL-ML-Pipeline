@@ -1,0 +1,3 @@
+output_path: "output/valid_users.json"
+orient: "records"
+indent: 2

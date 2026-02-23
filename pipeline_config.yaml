@@ -1,0 +1,37 @@
+# pipeline_config.yaml
+# ─────────────────────────────────────────────────────────────────────
+# Top-level orchestration file.  Defines *what* runs, in *what order*,
+# and *where* the results go.  Source-specific details live in the
+# per-source config files under configs/.
+# ─────────────────────────────────────────────────────────────────────
+
+version: "1.0"
+
+pipeline:
+  name: "jsonplaceholder_todos"
+  description: "Pull fake todos from JSONPlaceholder and save to JSON."
+
+  # ── Extract ────────────────────────────────────────────────────────
+  extract:
+    source: "rest_api"                    # maps to a registered extractor class
+    config_file: "configs/sources/jsonplaceholder.yaml"
+
+  # ── Transform (chain executed top-to-bottom) ───────────────────────
+  transform:
+    - name: "pydantic_validation"
+      config_file: "configs/transforms/pydantic_validation.yaml"
+    - name: "data_cleaning"
+      config_file: "configs/transforms/data_cleaning.yaml"
+
+  # ── Load ───────────────────────────────────────────────────────────
+  load:
+    destination: "json_local"             # maps to a registered loader class
+    config_file: "configs/loaders/json_local.yaml"
+
+# ── Global settings ──────────────────────────────────────────────────
+settings:
+  log_level: "INFO"
+  retry:
+    max_attempts: 3
+    backoff_seconds: 2
+  on_failure: "abort"                     # abort | skip | warn

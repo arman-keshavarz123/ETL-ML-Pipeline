@@ -1,0 +1,4 @@
+strip_whitespace: true
+deduplicate: true
+cast_types:
+  id: "int64"

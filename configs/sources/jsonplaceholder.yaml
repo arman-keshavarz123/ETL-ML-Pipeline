@@ -1,0 +1,9 @@
+# configs/sources/jsonplaceholder.yaml
+# Free public API — no auth required, always available.
+# Returns 200 fake todo items.
+
+base_url: "https://jsonplaceholder.typicode.com"
+endpoint: "/todos"
+
+pagination: "none"
+timeout: 15

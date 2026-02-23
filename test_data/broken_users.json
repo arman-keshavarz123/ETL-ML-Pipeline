@@ -1,0 +1,12 @@
+[
+  {"id": 1, "name": "Alice Johnson",   "email": "alice@example.com"},
+  {"id": 2, "name": "Bob Smith",       "email": "not-an-email"},
+  {"id": 3, "name": "Charlie Brown",   "email": "charlie@corp.io"},
+  {"id": -5, "name": "Bad ID User",    "email": "neg@example.com"},
+  {"id": 4, "name": "",                "email": "empty-name@test.com"},
+  {"id": 5, "name": "Eve Davis",       "email": "eve@domain.org"},
+  {"id": 6, "name": "Frank",           "email": ""},
+  {"id": 7, "name": "Grace Hopper",    "email": "grace@navy.mil"},
+  {"id": 8, "name": "Hank",            "email": "also not an email @@@"},
+  {"id": 9, "name": "Ivy Chen",        "email": "ivy@example.com"}
+]

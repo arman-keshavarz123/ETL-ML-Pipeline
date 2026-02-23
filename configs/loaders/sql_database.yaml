@@ -1,0 +1,7 @@
+# configs/loaders/sql_database.yaml
+# SQLite database for storing pipeline output.
+
+connection_string: "sqlite:///output/todos.db"
+table_name: "todos"
+if_exists: "replace"
+index: false
