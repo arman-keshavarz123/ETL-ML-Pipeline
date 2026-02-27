@@ -35,6 +35,7 @@ output/
 *.sqlite3
 state.json
 *.tmp
+feature_importance.png
 
 # Test / cache
 .pytest_cache/

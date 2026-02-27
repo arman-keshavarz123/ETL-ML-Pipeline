@@ -1,0 +1,6 @@
+# SQLite database for financial feature data.
+
+connection_string: "sqlite:///finance.db"
+table_name: "daily_price_features"
+if_exists: "replace"
+index: false

@@ -1,6 +1,6 @@
-# Data Extractor
+# ETL-ML-Pipeline
 
-A configuration-driven ETL (Extract, Transform, Load) pipeline built in Python. Define your entire data pipeline in YAML — no application code changes needed to add new sources, transformations, or destinations.
+A configuration-driven ETL (Extract, Transform, Load) pipeline with a built-in financial ML prediction model. Define data pipelines entirely in YAML, then use the extracted features to train baseline ML models for price forecasting.
 
 ## Table of Contents
 
@@ -11,6 +11,8 @@ A configuration-driven ETL (Extract, Transform, Load) pipeline built in Python. 
 - [Quick Start](#quick-start)
 - [CLI Usage](#cli-usage)
 - [How the Pipeline Works](#how-the-pipeline-works)
+- [Finance Pipeline](#finance-pipeline)
+- [ML Prediction Model](#ml-prediction-model)
 - [Configuration Reference](#configuration-reference)
   - [Pipeline Config](#pipeline-config)
   - [Extractors](#extractors)
@@ -26,13 +28,15 @@ A configuration-driven ETL (Extract, Transform, Load) pipeline built in Python. 
 
 - **YAML-driven** — define pipelines entirely through configuration files
 - **Plugin architecture** — extractors, transformers, and loaders are auto-discovered via a decorator-based registry
-- **Multiple data sources** — REST APIs, local JSON files, web scraping via headless Chromium
+- **Multiple data sources** — REST APIs, local JSON files, web scraping via headless Chromium, Alpha Vantage financial API
 - **Data validation** — validate rows against Pydantic models, automatically dropping invalid records
 - **Data cleaning** — 11 built-in cleaning rules (dedup, strip whitespace, type casting, date standardization, etc.)
+- **Technical indicators** — RSI, SMA, Bollinger Bands, MACD computed from OHLCV data
 - **Multiple destinations** — local JSON files, SQL databases (SQLite, PostgreSQL) with upsert support
 - **Incremental loading** — cursor-based extraction so only new/changed data is pulled on subsequent runs
 - **Atomic state persistence** — cursor state is saved only after a successful load, preventing data inconsistency
 - **Retry with backoff** — configurable exponential backoff on transient failures
+- **ML baseline model** — XGBoost and Ridge regression for next-day price movement prediction with time-series cross-validation
 
 ## Architecture
 
@@ -54,8 +58,14 @@ A configuration-driven ETL (Extract, Transform, Load) pipeline built in Python. 
  │                 │ │   (chain)       │ │                   │
  │ • REST API      │ │ • Validation    │ │ • JSON file       │
  │ • JSON file     │ │ • Cleaning      │ │ • SQL database    │
- │ • Web scraper   │ │ • Pass-through  │ │   (with upsert)   │
- └─────────────────┘ └─────────────────┘ └───────────────────┘
+ │ • Web scraper   │ │ • Tech. indic.  │ │   (with upsert)   │
+ │ • Alpha Vantage │ │ • Pass-through  │ │                   │
+ └─────────────────┘ └────────┬────────┘ └───────────────────┘
+                               │
+                    ┌──────────▼───────────┐
+                    │   ML Prediction      │
+                    │   (predict.py)       │
+                    └──────────────────────┘
 ```
 
 The engine reads a pipeline YAML file, resolves string keys (like `"rest_api"` or `"json_local"`) to concrete Python classes through the **registry**, and executes the Extract → Transform → Load lifecycle. The engine never imports a concrete class directly — everything is discovered via `@register_extractor`, `@register_transformer`, and `@register_loader` decorators at import time.
@@ -70,16 +80,19 @@ The engine reads a pipeline YAML file, resolves string keys (like `"rest_api"` o
 | **httpx** | HTTP client for REST API extraction (sync, with timeout and auth support) |
 | **Playwright** | Headless Chromium browser for web scraping extraction |
 | **SQLAlchemy** | Database abstraction for SQL loading (SQLite, PostgreSQL) with dialect-specific upsert |
+| **XGBoost** | Gradient-boosted tree model for price prediction |
+| **scikit-learn** | Ridge regression, TimeSeriesSplit cross-validation, evaluation metrics |
+| **matplotlib** | Feature importance visualization |
 | **PyYAML** | YAML parsing for all configuration files |
-| **pytest** | Test framework (99 tests) |
+| **pytest** | Test framework (143 tests) |
 
 ## Installation
 
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/arman-keshavarz123/Data-Extractor.git
-cd Data-Extractor
+git clone https://github.com/arman-keshavarz123/ETL-ML-Pipeline.git
+cd ETL-ML-Pipeline
 ```
 
 ### 2. Create a virtual environment
@@ -92,19 +105,19 @@ source .venv/bin/activate
 ### 3. Install the package
 
 ```bash
-pip install -e ".[dev]"
-```
-
-Or install dependencies manually:
-
-```bash
-pip install pandas pydantic "pydantic[email]" httpx pyyaml sqlalchemy playwright pytest
+pip install -e .
 ```
 
 ### 4. Install Playwright browsers (only needed for web scraping)
 
 ```bash
 playwright install chromium
+```
+
+### 5. Install OpenMP (macOS only, needed for XGBoost)
+
+```bash
+brew install libomp
 ```
 
 ## Quick Start
@@ -164,12 +177,14 @@ EXTRACTORS
   rest_api                       RESTAPIExtractor
   json_file                      JSONFileExtractor
   playwright_scraper             PlaywrightScraperExtractor
+  alpha_vantage                  AlphaVantageExtractor
 
 TRANSFORMERS
 ------------
   pass_through                   PassThroughTransformer
   pydantic_validation            PydanticValidationTransformer
   data_cleaning                  DataCleaningTransformer
+  technical_indicators           TechnicalIndicatorTransformer
 
 LOADERS
 -------
@@ -261,6 +276,81 @@ settings:
   on_failure: "abort"
 ```
 
+## Finance Pipeline
+
+The finance pipeline extracts daily OHLCV (Open, High, Low, Close, Volume) data from the Alpha Vantage API, validates it, computes technical indicators, and loads the enriched feature set into a SQLite database.
+
+### Run the finance pipeline
+
+```bash
+# Set your Alpha Vantage API key (free at https://www.alphavantage.co/support/#api-key)
+echo "ALPHA_VANTAGE_API_KEY=your_key_here" > .env
+
+# Run the pipeline
+python -m data_extractor -c finance_config.yaml
+```
+
+### What it does
+
+1. **Extract** — Fetches daily OHLCV data from Alpha Vantage (`configs/sources/alpha_vantage.yaml`)
+2. **Validate** — Drops rows with negative prices or missing fields via Pydantic schema (`OHLCVRecord`)
+3. **Compute indicators** — RSI-14, SMA-50, Bollinger Bands (20, 2σ), MACD (12/26/9) with configurable periods
+4. **Load** — Writes the enriched feature set to `finance.db` (table: `daily_price_features`)
+
+### Technical indicators
+
+| Indicator | Default Period | Description |
+|---|---|---|
+| SMA | 50 | Simple Moving Average of close price |
+| RSI | 14 | Relative Strength Index (Wilder's smoothed) |
+| Bollinger Bands | 20, 2σ | Upper and lower bands around SMA |
+| MACD | 12/26/9 | EMA crossover with signal line and histogram |
+
+## ML Prediction Model
+
+After running the finance pipeline, use the baseline ML model to predict next-day price movement:
+
+```bash
+python predict.py
+```
+
+### How it works
+
+1. **Loads** the `daily_price_features` table from `finance.db`
+2. **Creates target** — next-day percentage return: `(close[t+1] - close[t]) / close[t] * 100`
+3. **Trains two models** using `TimeSeriesSplit(n_splits=5)`:
+   - **XGBRegressor** — gradient-boosted trees (strong baseline for tabular data)
+   - **Ridge** — L2-regularized linear regression (simpler comparison)
+4. **Evaluates** per-fold RMSE and mean RMSE for each model
+5. **Saves** a top-5 feature importance bar chart to `feature_importance.png`
+
+### Features used
+
+`open`, `high`, `low`, `close`, `volume`, `sma_50`, `rsi_14`, `bb_upper`, `bb_lower`, `macd`, `macd_signal`, `macd_histogram`
+
+### Sample output
+
+```
+Loading data from finance.db...
+Loaded 51 rows, 13 columns
+
+After target creation: 50 rows
+
+Training models with TimeSeriesSplit (5 folds):
+
+  XGBoost fold 1: RMSE = 1.6940
+  XGBoost fold 2: RMSE = 2.8518
+  ...
+  XGBoost mean RMSE: 3.4258
+
+  Ridge fold 1: RMSE = 1.9080
+  Ridge fold 2: RMSE = 3.7089
+  ...
+  Ridge mean RMSE: 5.0133
+
+Saved feature_importance.png
+```
+
 ## Configuration Reference
 
 ### Pipeline Config
@@ -277,9 +367,6 @@ pipeline:
   extract:
     source: "<extractor_key>"      # Registered extractor name
     config_file: "path/to/config.yaml"
-    # OR inline config:
-    # inline_config:
-    #   base_url: "https://..."
 
   transform:                        # Optional — list of transforms, executed in order
     - name: "<transformer_key>"
@@ -331,6 +418,21 @@ Reads a local JSON file into a DataFrame.
 ```yaml
 file_path: "data/input.json"
 orient: "records"                   # Pandas JSON orient (records, columns, index, etc.)
+```
+
+#### `alpha_vantage` — Alpha Vantage Financial API Extractor
+
+Fetches daily OHLCV data from the Alpha Vantage API.
+
+```yaml
+base_url: "https://www.alphavantage.co"
+endpoint: "/query"
+query_params:
+  function: "TIME_SERIES_DAILY"
+  symbol: "IBM"
+  outputsize: "compact"             # "compact" (100 days) or "full" (20+ years, premium)
+api_key_env: "ALPHA_VANTAGE_API_KEY" # Reads API key from environment variable
+timeout: 30
 ```
 
 #### `playwright_scraper` — Web Scraper Extractor
@@ -392,6 +494,20 @@ standardize_dates:                       # Parse and standardize date columns
 cast_types:                              # Cast column types
   id: "int64"
   completed: "bool"
+```
+
+#### `technical_indicators` — Financial Technical Indicators
+
+Computes RSI, SMA, Bollinger Bands, and MACD from OHLCV data. Rows from the rolling-window warmup period are automatically dropped.
+
+```yaml
+rsi_period: 14
+sma_period: 50
+bb_period: 20
+bb_std: 2.0
+macd_fast: 12
+macd_slow: 26
+macd_signal: 9
 ```
 
 ### Loaders
@@ -476,10 +592,12 @@ The new cursor is still saved after a successful load, so subsequent incremental
 |---|---|---|---|
 | Extractor | `rest_api` | `RESTAPIExtractor` | HTTP API with pagination and auth |
 | Extractor | `json_file` | `JSONFileExtractor` | Local JSON files |
+| Extractor | `alpha_vantage` | `AlphaVantageExtractor` | Alpha Vantage financial API (OHLCV) |
 | Extractor | `playwright_scraper` | `PlaywrightScraperExtractor` | Headless Chromium web scraping |
 | Transformer | `pass_through` | `PassThroughTransformer` | No-op (returns DataFrame unchanged) |
 | Transformer | `pydantic_validation` | `PydanticValidationTransformer` | Row validation against Pydantic models |
 | Transformer | `data_cleaning` | `DataCleaningTransformer` | 11 configurable cleaning rules |
+| Transformer | `technical_indicators` | `TechnicalIndicatorTransformer` | RSI, SMA, Bollinger Bands, MACD |
 | Loader | `json_local` | `JSONLocalLoader` | Write to local JSON file |
 | Loader | `sql_database` | `SQLAlchemyLoader` | SQL databases with upsert support |
 
@@ -518,9 +636,21 @@ python -m data_extractor -c demo_user_pipeline.yaml
 
 Reads intentionally broken user data from `test_data/broken_users.json`, validates against a `User` Pydantic model (drops records with invalid emails, negative IDs, etc.), and saves the clean records.
 
+### Financial Feature Pipeline + ML Model
+
+```bash
+# 1. Extract OHLCV data, compute indicators, load to SQLite
+python -m data_extractor -c finance_config.yaml
+
+# 2. Train baseline ML models and generate feature importance chart
+python predict.py
+```
+
+Fetches IBM daily prices from Alpha Vantage, validates OHLCV records, computes technical indicators (RSI, SMA, Bollinger Bands, MACD), loads to `finance.db`, then trains XGBoost and Ridge models with time-series cross-validation.
+
 ## Testing
 
-Run the full test suite (99 tests):
+Run the full test suite (143 tests):
 
 ```bash
 python -m pytest tests/ -v
@@ -528,17 +658,20 @@ python -m pytest tests/ -v
 
 Tests cover:
 - All extractors, transformers, and loaders in isolation
-- Pydantic schema validation
+- Alpha Vantage response parsing, error handling, and series key detection
+- Financial technical indicator calculations (RSI bounds, SMA accuracy, Bollinger ordering, MACD histogram)
+- OHLCV Pydantic schema validation
+- Pydantic schema validation (TodoItem, User)
 - Plugin registry auto-discovery
 - State manager (atomic cursor persistence)
 - SQL upsert (insert, update, composite keys, edge cases)
 - CLI argument parsing and flag wiring
-- Full end-to-end pipeline integration (JSON, SQL, incremental, full-refresh)
+- Full end-to-end pipeline integration (JSON, SQL, incremental, full-refresh, finance)
 
 ## Project Structure
 
 ```
-Data-Extractor/
+ETL-ML-Pipeline/
 ├── src/data_extractor/
 │   ├── __main__.py              # CLI entry point (argparse)
 │   ├── engine.py                # Pipeline orchestrator
@@ -549,28 +682,33 @@ Data-Extractor/
 │   │   ├── base.py              # BaseExtractor ABC
 │   │   ├── rest_api.py          # REST API extractor (httpx)
 │   │   ├── json_file.py         # Local JSON file extractor
+│   │   ├── alpha_vantage.py     # Alpha Vantage financial API extractor
 │   │   └── playwright_scraper.py # Web scraper (Playwright)
 │   ├── transformers/
 │   │   ├── base.py              # BaseTransformer ABC
 │   │   ├── pass_through.py      # No-op transformer
 │   │   ├── pydantic_validation.py # Pydantic row validation
-│   │   └── data_cleaning.py     # 11-rule data cleaning
+│   │   ├── data_cleaning.py     # 11-rule data cleaning
+│   │   └── finance_transformer.py # Technical indicators (RSI, SMA, BB, MACD)
 │   ├── loaders/
 │   │   ├── base.py              # BaseLoader ABC
 │   │   ├── json_local.py        # JSON file loader
 │   │   └── sqlalchemy_loader.py # SQL database loader (with upsert)
 │   └── schemas/
 │       ├── todo.py              # TodoItem Pydantic model
-│       └── user.py              # User Pydantic model
+│       ├── user.py              # User Pydantic model
+│       └── ohlcv.py             # OHLCVRecord Pydantic model
 ├── configs/
 │   ├── sources/                 # Extractor configs
 │   ├── transforms/              # Transformer configs
 │   └── loaders/                 # Loader configs
-├── tests/                       # 99 pytest tests
+├── tests/                       # 143 pytest tests
+├── predict.py                   # Baseline ML model (XGBoost + Ridge)
 ├── pipeline_config.yaml         # REST API → JSON pipeline
 ├── sql_pipeline.yaml            # REST API → SQLite pipeline
 ├── webscrape_pipeline.yaml      # Web scrape → JSON pipeline
 ├── demo_user_pipeline.yaml      # Broken data validation demo
+├── finance_config.yaml          # Alpha Vantage → indicators → SQLite pipeline
 ├── pyproject.toml               # Package config and dependencies
 └── README.md
 ```

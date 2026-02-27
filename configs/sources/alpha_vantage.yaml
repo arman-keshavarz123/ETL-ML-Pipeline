@@ -1,0 +1,17 @@
+# configs/sources/alpha_vantage.yaml
+# Alpha Vantage TIME_SERIES_DAILY endpoint.
+# The API key is loaded from the ALPHA_VANTAGE_API_KEY environment variable.
+# Set it in your .env file or export it in your shell.
+
+base_url: "https://www.alphavantage.co"
+endpoint: "/query"
+
+query_params:
+  function: "TIME_SERIES_DAILY"
+  symbol: "IBM"
+  outputsize: "compact"
+
+api_key_env: "ALPHA_VANTAGE_API_KEY"
+
+pagination: "none"
+timeout: 30

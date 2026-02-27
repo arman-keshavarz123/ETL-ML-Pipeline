@@ -5,6 +5,10 @@ from __future__ import annotations
 import argparse
 import sys
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from data_extractor.engine import PipelineEngine
 from data_extractor.registry import list_registered
 

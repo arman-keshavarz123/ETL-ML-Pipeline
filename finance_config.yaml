@@ -1,0 +1,44 @@
+# finance_config.yaml
+# ─────────────────────────────────────────────────────────────────────
+# Financial ML feature pipeline.
+# Extracts daily OHLCV data from Alpha Vantage, validates the raw
+# records, computes technical indicators (RSI, SMA, Bollinger, MACD),
+# and loads the enriched feature set into a local SQLite database.
+#
+# Usage:
+#   python -m data_extractor -c finance_config.yaml
+#
+# Note: The demo API key returns sample IBM data. Replace "demo" in
+# configs/sources/alpha_vantage.yaml with a real key for other symbols.
+# ─────────────────────────────────────────────────────────────────────
+
+version: "1.0"
+
+pipeline:
+  name: "finance_daily_features"
+  description: "Extract OHLCV data, compute technical indicators, load to SQLite."
+
+  # ── Extract ────────────────────────────────────────────────────────
+  extract:
+    source: "alpha_vantage"
+    config_file: "configs/sources/alpha_vantage.yaml"
+
+  # ── Transform (chain executed top-to-bottom) ───────────────────────
+  transform:
+    - name: "pydantic_validation"
+      config_file: "configs/transforms/ohlcv_validation.yaml"
+    - name: "technical_indicators"
+      config_file: "configs/transforms/technical_indicators.yaml"
+
+  # ── Load ───────────────────────────────────────────────────────────
+  load:
+    destination: "sql_database"
+    config_file: "configs/loaders/finance_sql.yaml"
+
+# ── Global settings ──────────────────────────────────────────────────
+settings:
+  log_level: "INFO"
+  retry:
+    max_attempts: 3
+    backoff_seconds: 2
+  on_failure: "abort"

@@ -1,0 +1,6 @@
+# Validate raw OHLCV records against the OHLCVRecord schema.
+# Rows with negative prices or missing fields are dropped.
+
+model: "data_extractor.schemas.ohlcv.OHLCVRecord"
+chunk_size: 1000
+strict: false

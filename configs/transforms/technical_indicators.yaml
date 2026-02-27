@@ -1,0 +1,10 @@
+# Technical indicator parameters.
+# Defaults match standard Wall Street conventions.
+
+rsi_period: 14
+sma_period: 50
+bb_period: 20
+bb_std: 2.0
+macd_fast: 12
+macd_slow: 26
+macd_signal: 9
